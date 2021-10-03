@@ -1,17 +1,17 @@
 ---
-title: "Technical Document vs 0.2"
+title: "Technical Document vs 0.1"
 author: "Jan van Rongen"
 date: "2021-10-03"
 output: pdf_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ## Introduction
 
-We analyse data from the State of Israel related to COVID vaccines and infections. This is the technical document that contains all code used. This is a reanalysis of a document circulating on Internet. 
+We analyse data from the state Israel related to COVID vaccines and infections. This is the technical document that contains all code used.
 
 The document itself is an RMarkdown worksheet that, when formatted in pdf, hides the code.
 
@@ -45,22 +45,20 @@ Coding small numbers as `<5` or `<15` is a bit strange, but let's skip that. The
 
 One more serious problem is the way the Israeli population is defined. All 450K+ colonists in the occupied part are counted, but not the Palestines that live there. Colonists have access to vaccines, Palestines not. That means that we actually work with incomplete data (or overcomplete, depending on your point of view).
 
-Another point: I do not know if the most recent data is complete or whether there is some left in the pipeline. That can be done by caomparing with an older version of the files, but that is for later.
-
-Finally something that comes out of a later analysis of the RR for Adults. There is a sharp increase around mid june, at the same time that there is a sharp increase in the number of infections. If the date in the `cases` file is the date of report instead of Day Of Onset, or a mix of both, that could explain a fast increase of the RR. In this case it would mean a slower reporting of infections with non vaccinated people. 
+Finally, I do not know if the most recent data is complete or whether there is some left in the pipeline. That can be done by caomparing with an older version of the files, but that is for later.
 
 ## Data overview
 
-Note that one table has 40 weeks, one has 41, so we can only combine the data of the first 40 weeks. 
+Note that one table has 40 weeks, one has 41.
 
 First we aggregate over the 20+ age groups. 
 
 ### Fully vs non vaccinated Adults
 
-In fig. 1, the last week in this sample, 83% of the Adults is fully vaccinated.
+In the last week in this sample, 83% of the Adults is fully vaccinated.
 
 
-```{r echo=FALSE, fig.height=3, fig.width=5, fig.cap= "Degree of vaccination"}
+```{r echo=FALSE, fig.height=3, fig.width=5}
 load("./data/vacc.Rdata")
 
 fully_vac$Adults <- rowSums(fully_vac[,-(1:2)])
@@ -81,12 +79,10 @@ pretty_date(add=T, kleur=2, lwd=2, df)
 
 ### Same for youth
 
-Youth (age group 0-19) has a low percentage fully vaccinated. 75% is not (yet)  vaccinated at all. See fig. 2.
+Youth (age group 0-19) has a low percentage fully vaccinated. 75% is not (yet)  vaccinated at all.
 
 
-
-
-```{r echo=FALSE, fig.height=3, fig.width=5, fig.cap= "idem, Youth"}
+```{r echo=FALSE, fig.height=3, fig.width=5}
 
 
 df<- make_cases(fully_vac[, c("weekstart", "0-19")])
@@ -100,13 +96,12 @@ pretty_date(add=T, kleur=2, lwd=2, df)
 
 ```
 
-
-
 ### Interesting second wave
 
-See fig. 3.
+```{r echo=FALSE, fig.height=3, fig.width=5}
 
-```{r echo=FALSE, fig.height=3, fig.width=5, fig.cap= "Infection Patterns"}
+
+
 # fully vaccinated after 0+ days 
 # with 2nd dose or 3rd dose (aasuming they are exclusive)
 # and without vaccins. 
@@ -143,18 +138,13 @@ pretty_date(add=T, kleur=2, lwd=2, df)
 
 ```
 
-
-
-
 There are two remakable things here: almost no infections from april to end june and a high wave of infections later.
 
 That begs the question: what is the RR? Did vaccination help? For the april-june period the numbers are probably too low for any accurate estimate, but for that second wave?
 
 ### Relative Risk for Adults
 
-See fig. 4. 
-
-```{r  echo=FALSE, fig.height=3, fig.width=5, fig.cap= "Adults RR"}
+```{r  echo=FALSE, fig.height=3, fig.width=5}
 # now to the Relative Risk. Or Risk Ratio. 
 # for evry week we make a 2 by 2 table of fully/non vacc
 # versus testes pos or negative. We have the marginals
@@ -185,19 +175,13 @@ pretty_date(df, main="Relative risk for fully vaccinated adults in Israel")
 
 ```
 
-
-
-
 That means that the relative risk for fully vaccinated adults in the week starting 2021-09-19 is 23% in other words not vaccinated people are at least 4 times more likely to get infected.
 
 ### Without the third shot
 
-Maybe the decrease is caused by the start of "boosting": using a third shot. We repeat the above plot with data from people that had no third one. See fig. 5.
+Maybe the decrease is caused by the start of "boosting": using a third shot. We repeat the above plot with data from people that had no third one,
 
-
-
-
-```{r echo=FALSE, fig.height=3, fig.width=5, fig.cap= "Adults RR (2)"}
+```{r echo=FALSE, fig.height=3, fig.width=5}
 dub_vac_pos<- data.frame(weekstart=weekstart)
 # 
 for( a in age_group){
@@ -236,17 +220,6 @@ pretty_date(df, main="Relative risk for fully without booster \nvaccinated adult
 ```
 
 
-
-
-
 ## Conclusion
 
-With the above overall data, it does not make much sense to look at the behaviour of smaller (age) groups. We will probably see enother example of the ecological fallacy. 
-
-Figures 4 and 5 suggest that a thord shot ("boosting") helps. But the RR seems so volatile here, without further analysis we simply do not know.
-
-Finally, in no way we see any added value to introduce a measure of VE=(1-RR). It is not found in the literature of epidemiology AFAIK, see f.i. https://www.wikilectures.eu/w/Attributable_and_Relative_Risks,_Odds_Ratio /
-
-## References
-
-This file can be found on github. All referenced documents are in a subdirectory.
+With the above overall data, it does not make much sense to look at the behaviour of smaller (age) groups. The above shows that for the whole adult population the VE=(1-RR) definetely does not approach  0. 
