@@ -1,0 +1,357 @@
+---
+title: "Technical Document vs 0.3"
+author: "Jan van Rongen"
+date: "2021-10-04"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+## Introduction
+
+We analyse data from the State of Israel related to COVID vaccines and infections. This is the technical document that contains all code used. This is a reanalysis of a document circulating on Internet. 
+
+The document itself is an RMarkdown worksheet that, when formatted in pdf, hides the code.
+
+## Data sources and cleaning
+
+We use four data sources: three from the Israeli government site and one from a spreadsheet with population data. The data was imported manually on 2021-10-02.
+
+```{r echo= FALSE, message=FALSE, warning=FALSE}
+
+source("get_clean.R") # get and clean data
+source("./lib/lib.R") # plot routine
+```
+
+The file `vaccinated-per-day-2021-09-28` is aggregated to a per week file. Numeric fields with `<5` or `<15` were converted to 3 and 8 resp. Weeks are identified by their first day. Four missing records for the 90+ age category were added to `cases-among-vaccinated-134.csv`
+
+Using the `population` table we construct cumulative totals of fulle vaccinated, single vaccinated and not vaccinated.
+
+One file not yet used.
+
+## Definitions and methods
+
+_Fully vaccinated_ are people from the day of their second dose. _Single vaccinated_ are people that had one dose but not two (from the date of first dose). All others are _unvaccinated_. _Infected_ are people that (on a certain day) tested positive. All others are _not infected_ on that day.
+
+A _cross table_ is a 2x2 table with two (0,1) categories. The entries are the number of people in that combination of categories. When the matrix is `|a b | c d|` then the _ralative risk_ AKA _risk ratio_ AKA _RR_ is (a/(a+b))/(c/(c+d)). The _odds ratio_ is also known as _OR_ is a.d/b.c
+
+In epidemiologie RR and OR are used a lot. Numbers can be quite large, so in programming we have to avoid numerical overflow or incorrect rounding. 
+
+## Data quality
+
+Coding small numbers as `<5` or `<15` is a bit strange, but let's skip that. The population data has a bit of a problem. The table has `r sum(population$size)` for the total population, while wikipedia has 9364000, for 2019.  That means we will underestimate the number of unvaccinated people by (absolutely) 1 percentpoint. 
+
+One more serious problem is the way the Israeli population is defined. All 450K+ colonists in the occupied part are counted, but not the Palestines that live there. Colonists have access to vaccines, Palestines not. That means that we actually work with incomplete data (or overcomplete, depending on your point of view).
+
+Another point: I do not know if the most recent data is complete or whether there is some left in the pipeline. That can be done by caomparing with an older version of the files, but that is for later.
+
+Finally something that comes out of a later analysis of the RR for Adults. There is a sharp increase around mid june, at the same time that there is a sharp increase in the number of infections. If the date in the `cases` file is the date of report instead of Day Of Onset, or a mix of both, that could explain a fast increase of the RR. In this case it would mean a slower reporting of infections with non vaccinated people. 
+
+## Data overview
+
+Note that one table has 40 weeks, one has 41, so we can only combine the data of the first 40 weeks. 
+
+First we aggregate over the 20+ age groups. 
+
+### Fully vs non vaccinated Adults
+
+In fig. 1, the last week in this sample, 83% of the Adults is fully vaccinated.
+
+
+```{r echo=FALSE, fig.height=3, fig.width=5, fig.cap= "Degree of vaccination"}
+load("./data/vacc.Rdata")
+
+fully_vac$Adults <- rowSums(fully_vac[,-(1:2)])
+single_vac$Adults <- rowSums(single_vac[,-(1:2)])
+not_vac$Adults <- rowSums(not_vac[,-(1:2)])
+
+
+df<- make_cases(fully_vac[, c("weekstart", "Adults")])
+df$cases<- df$cases/sum(population$size[-1])
+pretty_date(df, ylab= "gedeelte", lwd=2, 
+            ylim=c(0,1), 
+            main="Israel adults\nFully vaccinated (red) vs non vaccinated (blue)")
+df<- make_cases(not_vac[, c("weekstart", "Adults")])
+df$cases<- df$cases/sum(population$size[-1])
+pretty_date(add=T, kleur=2, lwd=2, df) 
+pretty_abline(kleur=4, v=as.Date("2021-06-20"))
+
+
+```
+
+### Same for youth
+
+Youth (age group 0-19) has a low percentage fully vaccinated. 75% is not (yet)  vaccinated at all. See fig. 2.
+
+
+
+
+```{r echo=FALSE, fig.height=3, fig.width=5, fig.cap= "idem, Youth"}
+
+
+df<- make_cases(fully_vac[, c("weekstart", "0-19")])
+df$cases<- df$cases/population$size[1]
+pretty_date(df, ylab= "gedeelte", lwd=2, 
+            ylim=c(0,1), 
+            main="Israel Youth\nFully vaccinated (red) vs non vaccinated (blue)")
+df<- make_cases(not_vac[, c("weekstart", "0-19")])
+df$cases<- df$cases/population$size[1]
+pretty_date(add=T, kleur=2, lwd=2, df) 
+
+```
+
+
+
+### Interesting second wave
+
+See fig. 3.
+
+```{r echo=FALSE, fig.height=3, fig.width=5, fig.cap= "Infection Patterns"}
+# fully vaccinated after 0+ days 
+# with 2nd dose or 3rd dose (aasuming they are exclusive)
+# and without vaccins. 
+
+age_group<- unique(df1$Age_group)
+weekstart<- unique(df1$weekstart) # one less than previous files
+
+full_vac_pos<- data.frame(weekstart=weekstart)
+not_vac_pos<- data.frame(weekstart=weekstart)
+
+# 
+for( a in age_group){
+  tmp<- rowSums(df1[df1$Age_group == a, c(7:14)])
+  full_vac_pos<- cbind(full_vac_pos, tmp)
+  tmp<- df1[df1$Age_group == a, 15]
+  not_vac_pos <- cbind(not_vac_pos, tmp)
+}
+
+names(full_vac_pos)[-1]<- age_group
+names(not_vac_pos)[-1]<- age_group
+
+full_vac_pos$Adults <- rowSums(full_vac_pos[,-(1:2)])
+not_vac_pos$Adults <- rowSums(not_vac_pos[,-(1:2)])
+
+df<- make_cases(full_vac_pos[, c("weekstart", "Adults")])
+df$cases<- df$cases
+pretty_date(df, 
+            lwd=2, ylim=c(0, 30000),
+             main="Israel infected adults\nFully vaccinated(red) vs non vaccinated (blue)")
+df<- make_cases(not_vac_pos[, c("weekstart", "Adults")])
+df$cases<- df$cases
+pretty_date(add=T, kleur=2, lwd=2, df) 
+pretty_abline(kleur=4, v=as.Date("2021-06-20"))
+
+
+```
+
+
+
+
+There are two remakable things here: almost no infections from april to end june and a high wave of infections later.
+
+That begs the question: what is the RR? Did vaccination help? For the april-june period the numbers are probably too low for any accurate estimate, but for that second wave?
+
+### Relative Risk for Adults
+
+See fig. 4. 
+
+```{r  echo=FALSE, fig.height=3, fig.width=5, fig.cap= "Adults RR"}
+# now to the Relative Risk. Or Risk Ratio. 
+# for evry week we make a 2 by 2 table of fully/non vacc
+# versus testes pos or negative. We have the marginals
+# f1= full_vacc_pos
+# f3 =not_vac_pos
+# f2= full_vac -f1
+# f4= not_vac-f2
+
+risk<- data.frame(weekstart=weekstart)
+risk$a<- full_vac_pos$Adults
+risk$b<- fully_vac$Adults[1:40]- risk$a
+risk$c<- not_vac_pos$Adults
+risk$d<- not_vac$Adults[1:40]- risk$c
+risk$m1<- risk$a + risk$b
+risk$m3<- risk$c + risk$d
+
+f<- function (x) ifelse (x==0, 0, 1/x)
+risk$se <- sqrt(f(risk$a) + f(risk$b)+f(risk$c)+ f(risk$d))
+
+risk<- risk[-(1:3),] # remove non data
+risk$f1<- risk$a/risk$m1
+risk$f2<- risk$b/risk$m1
+risk$f3<- risk$c/risk$m3
+risk$f4<- risk$d/risk$m3
+
+risk$RR<- risk$f1/risk$f3
+risk$OR<- with(risk,f1*f4/(f2*f3))
+risk$RRlow <- exp(log(risk$RR+0.01)-1.96*risk$se)
+risk$RRhi <- exp(log(risk$RR+0.01)+1.96*risk$se)
+
+pretty_date(type="a", risk[,c("weekstart", "RRlow", "RRhi")], 
+            main="Relative risk for fully vaccinated adults in Israel", ylim=c(0,1.2))
+
+df<- make_cases(risk[, c("weekstart", "RR")])
+pretty_date(df, add=T)
+pretty_abline(kleur=4, v=as.Date("2021-06-20"))
+
+```
+
+The RR peaks in the week of 2021-06-20. 80% of the Adult population is then vaccinated. It is a week with a very low number of positive tests. See a later paragraph...
+
+So the relative risk for fully vaccinated adults in the week starting 2021-09-19 is 23% in other words not vaccinated people are at least 4 times more likely to get infected.
+
+### Without the third shot
+
+Maybe the decrease is caused by the start of "boosting": using a third shot. We repeat the above plot with data from people that had no third one. See fig. 5.
+
+
+
+
+```{r echo=FALSE, fig.height=3, fig.width=5, fig.cap= "Adults RR (2)"}
+dub_vac_pos<- data.frame(weekstart=weekstart)
+# 
+for( a in age_group){
+  tmp<- rowSums(df1[df1$Age_group == a, c(7:10)])
+  dub_vac_pos<- cbind(dub_vac_pos, tmp)
+}
+
+dub_vac_pos$Adults <- rowSums(dub_vac_pos[,-(1:2)])
+triple_vac$Adults<- rowSums(triple_vac[,-(1:2)])
+# f1= dub_vac_pos
+# f3 =not_vac_pos
+# f2= dub_vac -f1
+# f4= not_vac-f2
+
+risk2<- data.frame(weekstart=weekstart)
+risk2$f1<- full_vac_pos$Adults
+risk2$f2<- fully_vac$Adults[1:40]- risk2$f1- triple_vac$Adults[1:40]
+risk2$f3<- not_vac_pos$Adults
+risk2$f4<- not_vac$Adults[1:40]- risk2$f3
+risk2$m1<- risk2$f1 + risk2$f2
+risk2$m3<- risk2$f3 + risk2$f4
+
+risk2<- risk2[-(1:3),] # remove non data
+risk2$f1<- risk2$f1/risk2$m1
+risk2$f2<- risk2$f2/risk2$m1
+risk2$f3<- risk2$f3/risk2$m3
+risk2$f4<- risk2$f4/risk2$m3
+
+risk2$RR<- risk2$f1/risk2$f3
+risk2$OR<- with(risk2,f1*f4/(f2*f3))
+
+df<- make_cases(risk2[, c("weekstart", "RR")])
+pretty_date(df, main="Relative risk2 for fully without booster \nvaccinated adults in Israel")
+
+
+```
+
+### Where does the peak RR come from?
+
+We can calculate a CI for each of the 40 weeks RR, but that will not tell us much. A robust RR would not vary so wildly. There must be an external factor that causes this. 
+
+First the total number of positive tests. Then compare with the daily data from other source, this instance from OneWorld [2].
+
+
+```{r fig.height=3, fig.width=7, fig.cap="Total cases per week"}
+all_pos <- data.frame(weekstart=full_vac_pos$weekstart)
+for( a in age_group){
+  tmp<- rowSums(df1[df1$Age_group == a, c(3:15)])
+  all_pos<- cbind(all_pos, tmp)
+}
+
+names(all_pos)[-1]<- age_group
+all_pos$all <- rowSums(all_pos[,-1])
+
+op<- par(mfrow=c(1,2))
+
+pretty_date(make_cases(all_pos[, c("weekstart", "all")]), ccloc=0,
+            main= "Pos. Tested per week from\n cases-among-vaccinated-134")
+pretty_abline(kleur=4, v= as.Date("2021-08-29"))
+pretty_abline(kleur=4, v= as.Date("2021-01-10"))
+
+
+
+if(FALSE){
+  daily<- read.csv("./input/owid-covid-data.csv")
+  daily<- daily[daily$location == "Israel", ]
+  daily<- daily[, c("date", "new_cases")]
+  daily$date <- as.Date(daily$date)
+  daily<- as.data.frame(daily[-1,])
+  daily$weekstart <- daily$date+1-wday(daily$date)
+  d2<- aggregate(new_cases ~ weekstart, daily, sum)
+  save(d2, file="./data/d2.Rdata")
+} else load("./data/d2.Rdata")
+
+pretty_date(make_cases(d2), ccloc=0, 
+            main="Weekly new_cases from Oneworld")
+pretty_abline(kleur=4, v= as.Date("2021-08-29"))
+pretty_abline(kleur=4, v= as.Date("2021-01-10"))
+
+par(op)
+
+```
+
+
+
+There are some slight differences. Again that might have to do with shifts in the meaning of date fileds: date reported, date tested or date of onset. The One World data are definitely date reported. F.i. no cases were reported on 09-06 and 09-07, and a lot on the next day.
+
+So we are left with the question why the fast increase in RR happened 
+
+```{r fig.height=3, fig.width=5}
+tmp<- risk[, c(1:5, 9, 11)]
+tmp$IRR <- with(tmp, f3/f1)
+pretty_date(tmp[, c(1, ncol(tmp))], ylim=c(0,25), main="Inversed RR goes from 12 to 1 in 2 weeks??")
+
+```
+
+Lets assume this IRR is a measure for declining effectiveness, then it is (a) logical to assume it is declining exponential and (b) interesting to look at the linear trend of the log of this number.
+
+```{r fig.height=3, fig.width=5}
+
+df<- tmp[, c(1, ncol(tmp))]
+names(df)<- c("date", "cases")
+df$cases<- log(df$cases)
+df$nr<- 1: nrow(df)
+l<- lm(cases~nr, df)
+
+
+pretty_date(df, main="Results of lm on log(1/RR)", lwd=2)
+df0<- df
+df0$cases<- df$cases-l$residuals
+pretty_date(add=T, kleur=2 , df0, lty=2, lwd=2)
+
+```
+
+
+```{r fig.height=6, fig.width=7}
+
+op<- par(mfrow=c(2,2))
+plot(l)
+par(op)
+
+```
+
+Does not look right. The R^2 is mainly for the decline of the 
+curve, and that's why we started looking at this regression in the first place, See the residuals.
+
+
+In all other analyses we would now say: there is at least one yet unknown factor that plays an important role. 
+
+
+## Conclusion
+
+The timeseries of RR or OR is not a robust measure. There are indications of unknown external factors that deeply influence these numbers. They might be changes in testing procedures. Otherwise it is completely inexplicable how the RR can jump from 0.35 to 1.0 in merely one week. 
+
+With the above overall data, it does not make much sense to look at the behaviour of smaller (age) groups. We will probably see enother example of the ecological fallacy. 
+
+
+Finally, in no way we see any added value to introduce a measure of VE=(1-RR). It is not found in the literature of epidemiology AFAIK, see f.i. https://www.wikilectures.eu/w/Attributable_and_Relative_Risks,_Odds_Ratio /
+
+
+
+## References
+
+This file can be found on github (https://github.com/MrOoijer/vacc_IR). All referenced documents are in a subdirectory.
+
+[2] Hasell, J., Mathieu, E., Beltekian, D. et al. A cross-country database of COVID-19 testing. Sci Data 7, 345 (2020)
