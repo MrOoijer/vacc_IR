@@ -317,7 +317,7 @@ pretty_date(tmp[, c(1, ncol(tmp))], ylim=c(0,25), main="Inversed RR goes from 10
 
 From the previous model we can model log(IRR as lineair,
 
-```{r fig.height=3, fig.width=5}
+```{r fig.height=3, fig.width=5, warning= FALSE}
 
 df<- tmp[, c(1, ncol(tmp))]
 names(df)<- c("date", "cases")
@@ -337,8 +337,14 @@ start <- list(alpha = alpha0, beta = beta0)
 df$cases<- exp(df$cases)
 l<- nls(cases ~ beta* exp(alpha*nr), data=df, start=start)
 
-df$cases<- df$cases +1
-pretty_date(df, main="Results of non linear least squares regression for 1/RR", lwd=2, ylim=c(0,25))
+require(investr)
+a <- predFit(l, newdate=df$nr, interval = "confidence", level= 0.9)
+a[,1]<- df$date
+
+
+df$cases<- df$cases 
+pretty_date(a, type="a", main="Non linear least squares regression for 1/RR - 1\nPlus 95% CI", lwd=2, ylim=c(0,25)) 
+pretty_date(df, add=T)
 df0<- df
 df0$cases<- df$cases-residuals(l) 
 pretty_date(add=T, kleur=2 , df0, lty=2, lwd=2)
