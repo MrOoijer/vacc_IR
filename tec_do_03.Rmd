@@ -362,7 +362,7 @@ pretty_plot(data.frame(fitted=fitted(l) + 1, residuals=residuals(l)), type="p", 
 summary(l)
 ```
 
-You could give this a mild interpretation that teh vaccine(s) start out with being 21 times better than not vaccinating (against infection) and that they deay with a haltime of 4-5 months. Howver the residuals plot does not look right.  There is considerable disturbance, you could not call that noise.
+You could give this a mild interpretation that the vaccine(s) start out with being 23 times better than not vaccinating (against infection) and that they decay with a haltime of 4-5 months. However the residuals plot does not look right.  There is considerable disturbance, you could not call that noise. 
 
 In all other analyses we would now say: there is at least one yet unknown factor that plays an important role. 
 
