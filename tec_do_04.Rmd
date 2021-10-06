@@ -1,0 +1,107 @@
+---
+title: "Technical Document vs 0.4"
+author: "Jan van Rongen"
+date: "2021-10-06"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+## Introduction
+
+We analyse data from the State of Israel related to COVID vaccines and infections. This is the technical document that contains all code used. This is a reanalysis of a document circulating on Internet. 
+
+The document itself is an RMarkdown worksheet that, when formatted in pdf, hides the code.
+
+This version is an appendum to the previous version. we look at the different age groups in one week of april.  First repeat the initial data processing.
+
+## Data sources and cleaning
+
+We use four data sources: three from the Israeli government site [1] and one from a spreadsheet with population data. The data was imported manually on 2021-10-02.
+
+```{r echo= FALSE, message=FALSE, warning=FALSE}
+
+source("get_clean.R") # get and clean data
+source("./lib/lib.R") # plot routine
+```
+
+The file `vaccinated-per-day-2021-09-28` is aggregated to a per week file. Numeric fields with `<5` or `<15` were converted to 3 and 8 resp. Weeks are identified by their first day. Four missing records for the 90+ age category were added to `cases-among-vaccinated-134.csv`
+
+Using the `population` table we construct cumulative totals of fulle vaccinated, single vaccinated and not vaccinated.
+
+One file not yet used.
+
+## Definitions and methods
+
+_Fully vaccinated_ are people from the day of their second dose. _Single vaccinated_ are people that had one dose but not two (from the date of first dose). All others are _unvaccinated_. _Infected_ are people that (on a certain day) tested positive. All others are _not infected_ on that day.
+
+A _cross table_ is a 2x2 table with two (0,1) categories. The entries are the number of people in that combination of categories. When the matrix is `|a b | c d|` then the _ralative risk_ AKA _risk ratio_ AKA _RR_ is (a/(a+b))/(c/(c+d)). The _odds ratio_ is also known as _OR_ is a.d/b.c
+
+In epidemiologie RR and OR are used a lot. Numbers can be quite large, so in programming we have to avoid numerical overflow or incorrect rounding. 
+
+
+
+```{r echo=FALSE, fig.height=3, fig.width=5, fig.cap= "Degree of vaccination"}
+load("./data/vacc.Rdata")
+
+fully_vac$Adults <- rowSums(fully_vac[,-(1:2)])
+single_vac$Adults <- rowSums(single_vac[,-(1:2)])
+not_vac$Adults <- rowSums(not_vac[,-(1:2)])
+
+
+# df<- make_cases(fully_vac[, c("weekstart", "Adults")])
+# df$cases<- df$cases/sum(population$size[-1])
+# pretty_date(df, ylab= "gedeelte", lwd=2, 
+#             ylim=c(0,1), 
+#             main="Israel adults\nFully vaccinated (red) vs non vaccinated (blue)")
+# df<- make_cases(not_vac[, c("weekstart", "Adults")])
+# df$cases<- df$cases/sum(population$size[-1])
+# pretty_date(add=T, kleur=2, lwd=2, df) 
+# pretty_abline(kleur=4, v=as.Date("2021-06-20"))
+
+# fully vaccinated after 0+ days 
+# with 2nd dose or 3rd dose (aasuming they are exclusive)
+# and without vaccins. 
+
+age_group<- unique(df1$Age_group)
+weekstart<- unique(df1$weekstart) # one less than previous files
+
+full_vac_pos<- data.frame(weekstart=weekstart)
+not_vac_pos<- data.frame(weekstart=weekstart)
+
+# 
+for( a in age_group){
+  tmp<- rowSums(df1[df1$Age_group == a, c(7:14)])
+  full_vac_pos<- cbind(full_vac_pos, tmp)
+  tmp<- df1[df1$Age_group == a, 15]
+  not_vac_pos <- cbind(not_vac_pos, tmp)
+}
+
+names(full_vac_pos)[-1]<- age_group
+names(not_vac_pos)[-1]<- age_group
+
+full_vac_pos$Adults <- rowSums(full_vac_pos[,-(1:2)])
+not_vac_pos$Adults <- rowSums(not_vac_pos[,-(1:2)])
+
+```
+
+
+## Lookint at RR;s in one week pper age group.
+
+```{r}
+week_obj<- as.Date("2021-04-25")
+per_group<- data.frame(age_group= colnames(fully_vac[-1]))
+per_group$fn <- as.vector(t(fully_vac[weekstart == week_obj, -1]))
+per_group$fp <- as.vector(t(full_vac_pos[weekstart == week_obj, -1]))
+
+per_group$nn <- as.vector(t(not_vac[weekstart == week_obj, -1]))
+per_group$np <- as.vector(t(not_vac_pos[weekstart == week_obj, -1]))
+
+per_group$RR<- with(per_group, (fp/fn)/(np/nn))
+
+barplot(per_group[,6],  main="RR per age group in week 2021-04-25", names.arg=per_group$age_group)
+
+```
+
