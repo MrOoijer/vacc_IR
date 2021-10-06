@@ -17,7 +17,7 @@ The document itself is an RMarkdown worksheet that, when formatted in pdf, hides
 
 ## Data sources and cleaning
 
-We use four data sources: three from the Israeli government site and one from a spreadsheet with population data. The data was imported manually on 2021-10-02.
+We use four data sources: three from the Israeli government site [1] and one from a spreadsheet with population data. The data was imported manually on 2021-10-02.
 
 ```{r echo= FALSE, message=FALSE, warning=FALSE}
 
@@ -241,10 +241,20 @@ risk2$RR<- risk2$f1/risk2$f3
 risk2$OR<- with(risk2,f1*f4/(f2*f3))
 
 df<- make_cases(risk2[, c("weekstart", "RR")])
-pretty_date(df, main="Relative risk2 for fully without booster \nvaccinated adults in Israel")
+pretty_date(df, main="Relative risk  for fully without booster \nvaccinated adults in Israel")
 
 
 ```
+
+
+### A model for the RR.
+
+The assumption is that the effectiveness of the vaccin decreases over time. From the SIR model we can assume that for unvaccinated population $S_n$ the amount of new incidents is a linear function of the effecytive $R_e(t)$. A vaccine with initial effectveness $(1-\beta)$ will have decaying effectiveness with a rate of $(1-\beta .e^{-\alpha.t})$. Taking the group of fully vaccinated people (wwithout booster)
+we model the risk ratio $RR_{f/n} = (1-\beta .e^{-\alpha.t})$
+
+This is in fact an exponential regression of $RR_{f/n}$ against the function $-\beta .e^{-\alpha.t}$ which becomes linear when we take the log on both sides, In our example the RR is small, so the best thing to do is imvert it and solve the regression for $(RR_{n/f}-1= \beta .e^{-\alpha.t}$
+
+We will do that later and show that this model is in fact inadeqaute.
 
 ### Where does the peak RR come from?
 
@@ -299,59 +309,77 @@ There are some slight differences. Again that might have to do with shifts in th
 So we are left with the question why the fast increase in RR happened 
 
 ```{r fig.height=3, fig.width=5}
-tmp<- risk[, c(1:5, 9, 11)]
-tmp$IRR <- with(tmp, f3/f1)
-pretty_date(tmp[, c(1, ncol(tmp))], ylim=c(0,25), main="Inversed RR goes from 12 to 1 in 2 weeks??")
+tmp<- risk2[, 1:5]
+tmp$IRR <- with(tmp, -1+f3/f1)
+pretty_date(tmp[, c(1, ncol(tmp))], ylim=c(0,25), main="Inversed RR goes from 10 to 1 in 2 weeks??")
 
 ```
 
-Lets assume this IRR is a measure for declining effectiveness, then it is (a) logical to assume it is declining exponential and (b) interesting to look at the linear trend of the log of this number.
+From the previous model we can model log(IRR as lineair,
 
 ```{r fig.height=3, fig.width=5}
 
 df<- tmp[, c(1, ncol(tmp))]
 names(df)<- c("date", "cases")
+df$nr<- -1+(1: nrow(df))
+df<- df[-24,] #remove(NA)
 df$cases<- log(df$cases)
-df$nr<- 1: nrow(df)
-l<- lm(cases~nr, df)
 
+l0<- lm(cases~nr, df)
 
-pretty_date(df, main="Results of lm on log(1/RR)", lwd=2)
+# now this is not the right line, as the errors are not distributed correctly due to the exponential model. but is helps with the proper algo.
+
+beta0<- exp(l0$coeff[1])
+alpha0<- l0$coeff[2]
+start <- list(alpha = alpha0, beta = beta0)
+# non lineair least squares is a basic fucntion
+
+df$cases<- exp(df$cases)
+l<- nls(cases ~ beta* exp(alpha*nr), data=df, start=start)
+
+df$cases<- df$cases +1
+pretty_date(df, main="Results of non linear least squares regression for 1/RR", lwd=2, ylim=c(0,25))
 df0<- df
-df0$cases<- df$cases-l$residuals
+df0$cases<- df$cases-residuals(l) 
 pretty_date(add=T, kleur=2 , df0, lty=2, lwd=2)
 
 ```
 
 
-```{r fig.height=6, fig.width=7}
+```{r fig.height=3, fig.width=5}
 
-op<- par(mfrow=c(2,2))
-plot(l)
-par(op)
-
+pretty_plot(data.frame(fitted=fitted(l) + 1, residuals=residuals(l)), type="p", cex=1, kleur=2, main="Residuals plot", xlab="fitted values", ylab="residuals", xlim=c(-1,27), ylim=c(-15, 12))
 ```
 
-Does not look right. The R^2 is mainly for the decline of the 
-curve, and that's why we started looking at this regression in the first place, See the residuals.
 
+```{r}
+summary(l)
+```
+
+You could give this a mild interpretation that teh vaccine(s) start out with being 21 times better than not vaccinating (against infection) and that they deay with a haltime of 4-5 months. Howver the residuals plot does not look right.  There is considerable disturbance, you could not call that noise.
 
 In all other analyses we would now say: there is at least one yet unknown factor that plays an important role. 
 
 
 ## Conclusion
 
-The timeseries of RR or OR is not a robust measure. There are indications of unknown external factors that deeply influence these numbers. They might be changes in testing procedures. Otherwise it is completely inexplicable how the RR can jump from 0.35 to 1.0 in merely one week. 
+The timeseries of RR or OR is not a robust measure in this case. There are indications of unknown external factors that deeply influence these numbers. They might be changes in testing procedures. Otherwise it is completely inexplicable how the RR can jump from 0.35 to 1.0 in merely one week. 
 
-With the above overall data, it does not make much sense to look at the behaviour of smaller (age) groups. We will probably see enother example of the ecological fallacy. 
-
-
-Finally, in no way we see any added value to introduce a measure of VE=(1-RR). It is not found in the literature of epidemiology AFAIK, see f.i. https://www.wikilectures.eu/w/Attributable_and_Relative_Risks,_Odds_Ratio /
+With the above overall data, it does not make much sense to look at the behaviour of smaller (age) groups. We will probably see another example of the ecological fallacy instead of learning more. 
 
 
+Finally, in no way we see any added value to introduce a measure of VE=(1-RR). It is not found in the literature of epidemiology AFAIK, see f.i. [3]
+
+Probably the confusion is with the Hazard Rate, which is not the same as the RR [4].
 
 ## References
 
 This file can be found on github (https://github.com/MrOoijer/vacc_IR). All referenced documents are in a subdirectory.
 
+[1] Data downloaded from https://data.gov.il/dataset/covid-19 on 2021-10-02.
+
 [2] Hasell, J., Mathieu, E., Beltekian, D. et al. A cross-country database of COVID-19 testing. Sci Data 7, 345 (2020)
+
+[3] https://www.wikilectures.eu/w/Attributable_and_Relative_Risks,_Odds_Ratio/
+
+[4] https://www.sciencedirect.com/science/article/pii/S155608641532030X
