@@ -165,7 +165,7 @@ l<- nls(y ~ beta* exp(alpha*nr), data=regression_data
         , start=list(alpha=alpha0, beta= beta0))
 
 require(investr)
-a <- predFit(l, newdate=regression_data$nr, interval = "confidence", level= 0.9)
+a <- predFit(l, newdate=regression_data$nr, interval = "confidence", level= 0.95)
 a[,1]<- regression_data$weekstart
 
 
@@ -193,7 +193,7 @@ l<- nls(y ~ beta* exp(alpha*nr), data=regression_data
         , start=list(alpha=alpha0, beta= beta0))
 
 require(investr)
-a <- predFit(l, newdate=regression_data$nr, interval = "confidence", level= 0.9)
+a <- predFit(l, newdate=regression_data$nr, interval = "confidence", level= 0.95)
 a[,1]<- regression_data$weekstart
 
 
