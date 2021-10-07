@@ -117,28 +117,45 @@ Adults$m1<- Adults$full_cases- c(0, cumsum(Adults$full_pos)[1:39])
 # Risk rate f is a/m1
 
 # and the non-vac cases for Adults
-Adults$non_vac <- head(rowSums(not_vac[-(1:2)]), -1)
+Adults$non_vac <- head(rowSums(not_vac[,-(1:2)]), -1)
 tmp<- aggregate(. ~ weekstart, df1[df1$Age_group != "0-19", c(15,16)], sum)
 Adults$non_pos <- tmp[, 2] 
 Adults$c<- Adults$non_pos
 Adults$m2<- Adults$non_vac- c(0, cumsum(Adults$non_pos)[1:39])
 
-## do Youth later
 Adults$RR<- with(Adults,ifelse(m1==0, 0, (a/m1)/(c/m2)))
+
+##Youth
+#now the positive cases for Youth
+tmp<- aggregate(. ~ weekstart, df1[df1$Age_group == "0-19", c(9,10,16)], sum)
+Youth<- head(Youth,-1)
+Youth$full_pos<- tmp[,2]+tmp[,3]
+Youth$a<- Youth$full_pos
+Youth$m1<- Youth$full_cases- c(0, cumsum(Youth$full_pos)[1:39])
+
+# and the non-vac cases for Youth
+Youth$non_vac <- head(not_vac[,2], -1)
+tmp<- aggregate(. ~ weekstart, df1[df1$Age_group == "0-19", c(15,16)], sum)
+Youth$non_pos <- tmp[, 2] 
+Youth$c<- Youth$non_pos
+Youth$m2<- Youth$non_vac- c(0, cumsum(Youth$non_pos)[1:39])
+
+Youth$RR<- with(Youth,ifelse(m1==0, 0, (a/m1)/(c/m2)))
+
  
 ```
 
 
 And now the estimates.
 
-```{r fig.height=3, fig.width=5, fig.cap= "Adults RR"}
+```{r fig.height=3, fig.width=5}
 pretty_date(Adults[, c("weekstart", "RR")], ylim=0:1
       , main= "RR Adults\n fully vac after two weeks versus non vacc")
 
 
 ```
 
-```{r warning= FALSE, message= FALSE, fig.height=3, fig.width=5, fig.cap= "Adults RR with exponential trend"}
+```{r warning= FALSE, message= FALSE, fig.height=3, fig.width=5}
 regression_data<- data.frame(weekstart=Adults$weekstart, y=1-Adults$RR, nr=0:39)
 
 l0<- lm(log(y) ~nr, regression_data)
@@ -152,7 +169,35 @@ a <- predFit(l, newdate=regression_data$nr, interval = "confidence", level= 0.9)
 a[,1]<- regression_data$weekstart
 
 
-pretty_date(a, type="a", main="Non linear least squares regression for 1-RR\nPlus 95% CI", lwd=2, ylim=c(0,1.25)) 
+pretty_date(a, type="a", main="Non linear least squares regression for 1-RR\nAdults: plus 95% CI", lwd=2, ylim=c(0,1.25)) 
+pretty_date(regression_data, add=T)
+df0<- regression_data
+df0$y<- regression_data$y-residuals(l)
+pretty_date(add=T, kleur=2 , df0, lty=2, lwd=2)
+
+
+
+```
+
+Plus Youth
+
+
+
+```{r warning= FALSE, message= FALSE, fig.height=3, fig.width=5}
+regression_data<- data.frame(weekstart=Youth$weekstart, y=1-Youth$RR, nr=0:39)
+
+l0<- lm(log(y) ~nr, regression_data)
+beta0<- exp(l0$coeff[1])
+alpha0<- l0$coeff[2]
+l<- nls(y ~ beta* exp(alpha*nr), data=regression_data
+        , start=list(alpha=alpha0, beta= beta0))
+
+require(investr)
+a <- predFit(l, newdate=regression_data$nr, interval = "confidence", level= 0.9)
+a[,1]<- regression_data$weekstart
+
+
+pretty_date(a, type="a", main="Non linear least squares regression for 1-RR\nYouth: plus 95% CI", lwd=2, ylim=c(0,1.25)) 
 pretty_date(regression_data, add=T)
 df0<- regression_data
 df0$y<- regression_data$y-residuals(l)
