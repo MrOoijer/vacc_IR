@@ -1,7 +1,7 @@
 ---
 title: "Technical Document vs 0.3"
 author: "Jan van Rongen"
-date: "2021-10-04"
+date: "2021-10-07"
 output: pdf_document
 ---
 
@@ -307,65 +307,7 @@ par(op)
 There are some slight differences. Again that might have to do with shifts in the meaning of date fileds: date reported, date tested or date of onset. The One World data are definitely date reported. F.i. no cases were reported on 09-06 and 09-07, and a lot on the next day.
 
 So we are left with the question why the fast increase in RR happened 
-
-```{r fig.height=3, fig.width=5}
-tmp<- risk2[, 1:5]
-tmp$IRR <- with(tmp, -1+f3/f1)
-pretty_date(tmp[, c(1, ncol(tmp))], ylim=c(0,25), main="Inversed RR goes from 10 to 1 in 2 weeks??")
-
-```
-
-From the previous model we can model log(IRR as lineair,
-
-```{r fig.height=3, fig.width=5, warning= FALSE}
-
-df<- tmp[, c(1, ncol(tmp))]
-names(df)<- c("date", "cases")
-df$nr<- -1+(1: nrow(df))
-df<- df[-24,] #remove(NA)
-df$cases<- log(df$cases)
-
-l0<- lm(cases~nr, df)
-
-# now this is not the right line, as the errors are not distributed correctly due to the exponential model. but is helps with the proper algo.
-
-beta0<- exp(l0$coeff[1])
-alpha0<- l0$coeff[2]
-start <- list(alpha = alpha0, beta = beta0)
-# non lineair least squares is a basic fucntion
-
-df$cases<- exp(df$cases)
-l<- nls(cases ~ beta* exp(alpha*nr), data=df, start=start)
-
-require(investr)
-a <- predFit(l, newdate=df$nr, interval = "confidence", level= 0.9)
-a[,1]<- df$date
-
-
-df$cases<- df$cases 
-pretty_date(a, type="a", main="Non linear least squares regression for 1/RR - 1\nPlus 95% CI", lwd=2, ylim=c(0,25)) 
-pretty_date(df, add=T)
-df0<- df
-df0$cases<- df$cases-residuals(l) 
-pretty_date(add=T, kleur=2 , df0, lty=2, lwd=2)
-
-```
-
-
-```{r fig.height=3, fig.width=5}
-
-pretty_plot(data.frame(fitted=fitted(l) + 1, residuals=residuals(l)), type="p", cex=1, kleur=2, main="Residuals plot", xlab="fitted values", ylab="residuals", xlim=c(-1,27), ylim=c(-15, 12))
-```
-
-
-```{r}
-summary(l)
-```
-
-You could give this a mild interpretation that the vaccine(s) start out with being 23 times better than not vaccinating (against infection) and that they decay with a haltime of 4-5 months. However the residuals plot does not look right.  There is considerable disturbance, you could not call that noise. 
-
-In all other analyses we would now say: there is at least one yet unknown factor that plays an important role. 
-
+**This part replaced by report-01**
 
 ## Conclusion
 
