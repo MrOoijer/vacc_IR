@@ -14,13 +14,13 @@ knitr::opts_chunk$set(echo = FALSE)
 
 ## Introduction
 
-We analyse data from the State of Israel related to COVID vaccines and infections. This is c continuation on the technical documents that contain all code used. They were a reanalysis of a document circulating on Internet, but this document focusses on proper modelling. 
+We analyse data from the State of Israel related to COVID vaccines and infections. This analysis started as a reanalysis of a document circulating on Internet [1]. The previous technical document explored the data, while this document focusses on proper modelling that was not found in [1]. 
 
 The document itself is an RMarkdown worksheet that, when formatted in pdf, hides the code.
 
 ## Data sources and cleaning
 
-As before We use four data sources: three from the Israeli government site and one from a spreadsheet with population data. The data was imported manually on 2021-10-02.
+As before We use three data sources: two from the Israeli government site and one from a spreadsheet with population data. The data was imported manually on 2021-10-02.
 
 ```{r echo= FALSE, message=FALSE, warning=FALSE}
 
@@ -31,8 +31,6 @@ source("./lib/lib.R") # plot routine
 The file `vaccinated-per-day-2021-09-28` is aggregated to a per week file. Numeric fields with `<5` or `<15` were converted to 3 and 8 resp. Weeks are identified by their first day. Four missing records for the 90+ age category were added to `cases-among-vaccinated-134.csv`
 
 Using the `population` table we construct cumulative totals of fulle vaccinated, single vaccinated and not vaccinated.
-
-One file is not yet used.
 
 ## Goal and methods.
 
@@ -47,15 +45,17 @@ Unvaccinated: again here we assume that we measure the first infection.
 Disease prior to start of 2020-12-20 vaccination: we assume that the population that already had at least one infection is $W=0.15$ of the total population. That should be a parameter that can be changed,
 
 
-### State TRansition diagram
+### State Transition diagram
 
-We draw a State Transition Diagram of all possible states a person could go through, one of the many possibilitie for such a diagram. We have to make choices because nmost possible diagrams have transitions that we cannot calculate. This one might work. . 
+At the start of the period under investigation, there are only unvaccinated people. After that, there are three vaccination states: partial, full and boosted. In any of those 4 states people can become infected. After infection they might not revover, so we have nine states in total. However that is an unworkable model as many transitions cannot be calculated. 
 
-```{r message=FALSE, fig.width=7, fig.height=8, fig,cap= "STD"}
+Thus we use the following transitions where every infected person is removed from the data, corresponding to the common practice in cohort studies where there is an end state after the event under consideration. So our model removes the infected people after 1 week. 
+
+```{r message=FALSE, fig.width=5, fig.height=5.5, fig,cap= "STD"}
 require(diagram)
 
 states<- c("unvacc", "infected", "removed",
-           "part vacc", "full vac", "boosted")
+           "part vacc", "full vacc", "boosted")
 statemat<- matrix(0,6,6)
 statemat[,1] <- c(0, 1, 0, 1, 0, 0)
 statemat[, 2]<- c(0, 0, 1, 0, 0, 0)
@@ -64,30 +64,29 @@ statemat[, 5]<- c(0, 1, 0, 0, 0, 1)
 statemat[, 6]<- c(0, 1, 0, 0, 0, 0)
 colnames(statemat)<- rownames(statemat)<- states
 
-plotmat(statemat, cex.txt=0, main="state transition diagram")
+plotmat(statemat, cex.txt=0, main="State Transition Diagram")
 
 
 ```
 
-We do not know how many infected people are removed from the system, but in clinical trials in survival analysis people that reach an end state _are_  removed from the system. So we will do that. Of course this is an approximation we use as there is nothing better.
+It is possible that infected people re-enter the system to get vaccinated. There is no way we can tell. 
 
 
 ### Calculating Susceptible population. 
 
-From this diagram we can derive how to calculate the susceptible populations for the unvacced and fully vacced groups. We know how to calculate them from the weekly vaccinations, but they have to loose their infected members at the proper moment in time. 
+For this diagram we can derive derive the number of people in each state, even though we do not know exactly which stte transitions occur from week to week. 
 
 ### Algorithm
 
-The assumption is that the effectiveness of the vaccin decreases over time. From the SIR model we can learn that for unvaccinated population $S_n$, the amount of new incidents is a linear function of the effective $R_e(t)$. A vaccine with initial effectveness $\beta$ will have decaying effectiveness with a rate of $(\beta .e^{-\alpha.t})$ so the remaining effectiveness is one minus that. Taking the group of fully vaccinated people (wwithout booster)
-we model the risk ratio $RR_{f/n} = 1-\beta .e^{-\alpha.t}$
+The assumption is that the effectiveness of the vaccin decreases over time. From the SIR model we can learn that for unvaccinated population $S_n$, the amount of new incidents is a linear function of the effective reproduction number $R_e(t)$. A vaccine with initial effectveness $0<\beta<1$ will have decaying effectiveness with a rate of the shape $(\beta .e^{-\alpha.t})$ so the reproduction number for this group is one minus that times the $R_e(t)$. Taking two groups, the risk ration is the quotient of those reproduction numbers, so $RR_{f/n} = 1-\beta .e^{-\alpha.t}$
 
-This is in fact an exponential regression of $RR_{f/n}-1$ against the function $-\beta .e^{-\alpha.t}$. 
+This is in fact an exponential regression of $RR_{f/n}-1$ against the function $-\beta .e^{-\alpha.t}$. This looks familiar: it models the Vaccine Effectiveness as an exponential function. That is a Cox regression.
 
-To get a truely least squares estimate (so that the errors heve zero sum) we use the R function `nls` from the base library and we estimate the confidence interval using the `invertR`package. 
+This is a so called non linear least squres; we use the R function `nls` from the `base` library and we estimate the confidence interval using the `invertR` package. 
 
 ## Get the data ready
 
-We construct two data-frames for the Adults and the Youth Age groups with the relevant information. We assume that 15% of the population was infected before start vaccination. 
+We construct two data-frames for the Adults and the Youth Age groups with the relevant information. We assume that 15% of the population was infected before start of vaccination and so is excluded from the system. 
 
 ```{r}
 LEFTOVER= 0.85
@@ -124,6 +123,10 @@ Adults$c<- Adults$non_pos
 Adults$m2<- Adults$non_vac- c(0, cumsum(Adults$non_pos)[1:39])
 
 Adults$RR<- with(Adults,ifelse(m1==0, 0, (a/m1)/(c/m2)))
+f<- function (x) ifelse (x==0, 0, 1/x)
+se= sqrt(f(Adults$a)+f(Adults$c))
+Adults$hi<- exp(log(Adults$RR+0.01)+1.96*se)
+Adults$lo<- exp(log(Adults$RR+0.01)-1.96*se)
 
 ##Youth
 #now the positive cases for Youth
@@ -141,6 +144,9 @@ Youth$c<- Youth$non_pos
 Youth$m2<- Youth$non_vac- c(0, cumsum(Youth$non_pos)[1:39])
 
 Youth$RR<- with(Youth,ifelse(m1==0, 0, (a/m1)/(c/m2)))
+se= sqrt(f(Youth$a)+f(Youth$c))
+Youth$hi<- exp(log(Youth$RR+0.01)+1.96*se)
+Youth$lo<- exp(log(Youth$RR+0.01)-1.96*se)
 
  
 ```
@@ -149,14 +155,15 @@ Youth$RR<- with(Youth,ifelse(m1==0, 0, (a/m1)/(c/m2)))
 And now the estimates.
 
 ```{r fig.height=3, fig.width=5}
-pretty_date(Adults[, c("weekstart", "RR")], ylim=0:1
+pretty_date(Adults[, c("weekstart", "hi", "lo")], type="a", ylim=c(-0.3, 1.3)
       , main= "RR Adults\n fully vac after two weeks versus non vacc")
-
+pretty_date(add=T, Adults[, c("weekstart", "RR")], lwd=2)
 
 ```
 
 ```{r warning= FALSE, message= FALSE, fig.height=3, fig.width=5}
 regression_data<- data.frame(weekstart=Adults$weekstart, y=1-Adults$RR, nr=0:39)
+regression_data<- regression_data[Adults$a != 0,]
 
 l0<- lm(log(y) ~nr, regression_data)
 beta0<- exp(l0$coeff[1])
@@ -170,7 +177,7 @@ a[,1]<- regression_data$weekstart
 
 
 pretty_date(a, type="a", main="Non linear least squares regression for 1-RR\nAdults: plus 95% CI", lwd=2, ylim=c(0,1.25)) 
-pretty_date(regression_data, add=T)
+pretty_date(data.frame(Adults$weekstart, 1-Adults$RR), add=T)
 df0<- regression_data
 df0$y<- regression_data$y-residuals(l)
 pretty_date(add=T, kleur=2 , df0, lty=2, lwd=2)
@@ -179,12 +186,16 @@ pretty_date(add=T, kleur=2 , df0, lty=2, lwd=2)
 
 ```
 
-Plus Youth
+```{r fig.height=3, fig.width=5}
+pretty_date(Youth[, c("weekstart", "hi", "lo")], type="a", ylim=c(-0.3, 1.3)
+      , main= "RR Youth\n fully vac after two weeks versus non vacc")
+pretty_date(add=T, Youth[, c("weekstart", "RR")], lwd=2)
 
-
+```
 
 ```{r warning= FALSE, message= FALSE, fig.height=3, fig.width=5}
 regression_data<- data.frame(weekstart=Youth$weekstart, y=1-Youth$RR, nr=0:39)
+regression_data<- regression_data[Youth$a != 0,]
 
 l0<- lm(log(y) ~nr, regression_data)
 beta0<- exp(l0$coeff[1])
@@ -198,7 +209,7 @@ a[,1]<- regression_data$weekstart
 
 
 pretty_date(a, type="a", main="Non linear least squares regression for 1-RR\nYouth: plus 95% CI", lwd=2, ylim=c(0,1.25)) 
-pretty_date(regression_data, add=T)
+pretty_date(data.frame(Youth$weekstart, 1-Youth$RR), add=T)
 df0<- regression_data
 df0$y<- regression_data$y-residuals(l)
 pretty_date(add=T, kleur=2 , df0, lty=2, lwd=2)
@@ -209,7 +220,9 @@ pretty_date(add=T, kleur=2 , df0, lty=2, lwd=2)
 
 ## Discussion
 
-The adjustments on the input data are more realistic than previous attempts. The effect is that the RR decrease by the adjustments for positives, but increases when the proportion of positives in 2010 is increased. The overall piture howvere is smoother than without those adjustments,
+The adjustments on the input data are more realistic than previous attempts. The effect is that the RR decrease by the adjustments for positives, but increases when the proportion of positives in 2010 is increased. The overall picture is of unreliable and missing data in the summer period. 
+
+The regression shows the uncertainty in the estimate of the curve given the data. So the uncertainty in the data is not shown together with the regression. No need to do that as the picture is clear enough: the result is inconclusive.  
 
 From here we might conclude that the decay has a half-time of 6-10 months, but the data clearly does not fit the exponential model very well. In fact you woud never think of such a refression if you would only see the original curve.
 
