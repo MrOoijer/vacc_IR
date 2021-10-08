@@ -51,7 +51,7 @@ At the start of the period under investigation, there are only unvaccinated peop
 
 Thus we use the following transitions where every infected person is removed from the data, corresponding to the common practice in cohort studies where there is an end state after the event under consideration. So our model removes the infected people after 1 week. 
 
-```{r message=FALSE, fig.width=5, fig.height=5.5, fig,cap= "STD"}
+```{r message=FALSE, fig.width=5, fig.height=5.75, fig,cap= "STD"}
 require(diagram)
 
 states<- c("unvacc", "infected", "removed",
@@ -116,7 +116,7 @@ Adults$m1<- Adults$full_cases- c(0, cumsum(Adults$full_pos)[1:39])
 # Risk rate f is a/m1
 
 # and the non-vac cases for Adults
-Adults$non_vac <- head(rowSums(not_vac[,-(1:2)]), -1)
+Adults$non_vac <- LEFTOVER*head(rowSums(not_vac[,-(1:2)]), -1)
 tmp<- aggregate(. ~ weekstart, df1[df1$Age_group != "0-19", c(15,16)], sum)
 Adults$non_pos <- tmp[, 2] 
 Adults$c<- Adults$non_pos
@@ -137,7 +137,7 @@ Youth$a<- Youth$full_pos
 Youth$m1<- Youth$full_cases- c(0, cumsum(Youth$full_pos)[1:39])
 
 # and the non-vac cases for Youth
-Youth$non_vac <- head(not_vac[,2], -1)
+Youth$non_vac <- LEFTOVER*head(not_vac[,2], -1)
 tmp<- aggregate(. ~ weekstart, df1[df1$Age_group == "0-19", c(15,16)], sum)
 Youth$non_pos <- tmp[, 2] 
 Youth$c<- Youth$non_pos
