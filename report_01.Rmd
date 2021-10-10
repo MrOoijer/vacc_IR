@@ -1,7 +1,7 @@
 ---
 title: "Report_01"
 author: "Jan van Rongen"
-date: '2021-10-07'
+date: '2021-10-09'
 output:
   pdf_document: default
   html_document:
@@ -74,15 +74,17 @@ It is possible that infected people re-enter the system to get vaccinated. There
 
 ### Calculating Susceptible population. 
 
-For this diagram we can derive derive the number of people in each state, even though we do not know exactly which stte transitions occur from week to week. 
+For this diagram we can derive the number of people in each state, even though we do not know exactly how many state transitions occur from week to week. We also do not know for each individual what the time to event is, 
 
 ### Algorithm
 
 The assumption is that the effectiveness of the vaccin decreases over time. From the SIR model we can learn that for unvaccinated population $S_n$, the amount of new incidents is a linear function of the effective reproduction number $R_e(t)$. A vaccine with initial effectveness $0<\beta<1$ will have decaying effectiveness with a rate of the shape $(\beta .e^{-\alpha.t})$ so the reproduction number for this group is one minus that times the $R_e(t)$. Taking two groups, the risk ration is the quotient of those reproduction numbers, so $RR_{f/n} = 1-\beta .e^{-\alpha.t}$
 
-This is in fact an exponential regression of $RR_{f/n}-1$ against the function $-\beta .e^{-\alpha.t}$. This looks familiar: it models the Vaccine Effectiveness as an exponential function. That is a Cox regression.
+This is in fact an exponential regression of $RR_{f/n}-1$ against the function $-\beta .e^{-\alpha.t}$. This looks familiar: similar to the Vaccine Effectiveness as an exponential function. However it is not the same, the coefficientes will differ and it is not an exponential survival model. [1]
 
-This is a so called non linear least squres; we use the R function `nls` from the `base` library and we estimate the confidence interval using the `invertR` package. 
+This is also known as a poisson regression for which R has the `glm` function.  But in [2] we refine the model to a Weibull model Thus we need the more flexible R-function for nonlinear least squares `nls` and the `invertR` package for confidence interva;s. 
+
+
 
 ## Get the data ready
 
@@ -168,23 +170,57 @@ regression_data<- regression_data[Adults$a != 0,]
 l0<- lm(log(y) ~nr, regression_data)
 beta0<- exp(l0$coeff[1])
 alpha0<- l0$coeff[2]
-l<- nls(y ~ beta* exp(alpha*nr), data=regression_data
+l<- nls(y ~ beta* log1p(nr+1)* exp(alpha*nr), data=regression_data
         , start=list(alpha=alpha0, beta= beta0))
 
 require(investr)
-a <- predFit(l, newdate=regression_data$nr, interval = "confidence", level= 0.95)
-a[,1]<- regression_data$weekstart
+ci <- as.data.frame(predFit(l, newdate=regression_data$nr, interval = "confidence", level= 0.95))
+ci$date<- regression_data$weekstart
+ci<- ci[, c(4,2,3,1)]
 
 
-pretty_date(a, type="a", main="Non linear least squares regression for 1-RR\nAdults: plus 95% CI", lwd=2, ylim=c(0,1.25)) 
+pretty_date(ci, type="a", main="Weibull regression for 1-RR\nAdults: plus 95% CI", lwd=2, ylim=c(0,1.25)) 
 pretty_date(data.frame(Adults$weekstart, 1-Adults$RR), add=T)
 df0<- regression_data
 df0$y<- regression_data$y-residuals(l)
 pretty_date(add=T, kleur=2 , df0, lty=2, lwd=2)
 
+rmse <- function(a) sqrt(mean(a^2))
+r<- rmse(residuals(l))
+
+```
+
+Let's have a closer look at the residuals. Note that we excluded thr zero RR values bacause they are a bit artificial.
+
+```{r  fig.height=3, fig.width=5}
+
+df0<- data.frame(fit=ci$fit, res=residuals(l))
+df0$lm<- ci$lwr-ci$fit
+df0$um<- ci$upr-ci$fit
+df0<- df0[order(df0$fit), ]
+  
+
+pretty_plot(df0, type="p", cex=1.0, pch=21, ylim=c(-0.5, 0.5), xlim=c(0.45, 1),  kleur=2, main="Residuals plot is very non random", 
+            xlab="fitted values", ylab="residuals", ccloc=4)
+pretty_abline(kleur=1, h=c(0))
+
+df0s<-smooth.spline(df0, nknots=5, df= 5)
+dfs<- data.frame(x=df0s$x, y= df0s$y)
+pretty_plot(add=T, dfs, kleur=2)
+
+dfs<- data.frame(x=df0s$x, y= df0s$y+ df0$lm)
+pretty_plot(add=T, dfs, kleur=2, lty=2)
+
+dfs<- data.frame(x=df0s$x, y= df0s$y+ df0$um)
+pretty_plot(add=T, dfs, kleur=2, lty=2)
 
 
 ```
+
+The horizontal red line splits the residuals in half, bu so does the smoothed spline. Large areas where the CI does not contain the 0 indicate (and quite strongly so) an unknown confounder. It has considerable size as it explains +- 0.4 of the RR.
+
+The above diagram is enough for the end conclusion. But for completeness let's look at the Youth data.  We cannot draw any conclusions from that data either, 
+
 
 ```{r fig.height=3, fig.width=5}
 pretty_date(Youth[, c("weekstart", "hi", "lo")], type="a", ylim=c(-0.3, 1.3)
@@ -200,7 +236,7 @@ regression_data<- regression_data[Youth$a != 0,]
 l0<- lm(log(y) ~nr, regression_data)
 beta0<- exp(l0$coeff[1])
 alpha0<- l0$coeff[2]
-l<- nls(y ~ beta* exp(alpha*nr), data=regression_data
+l<- nls(y ~ beta* log1p(nr)*exp(alpha*nr), data=regression_data
         , start=list(alpha=alpha0, beta= beta0))
 
 require(investr)
@@ -218,7 +254,7 @@ pretty_date(add=T, kleur=2 , df0, lty=2, lwd=2)
 
 ```
 
-## Discussion
+## Discussion and conclusions
 
 The adjustments on the input data are more realistic than previous attempts. The effect is that the RR decrease by the adjustments for positives, but increases when the proportion of positives in 2010 is increased. The overall picture is of unreliable and missing data in the summer period. 
 
@@ -226,4 +262,10 @@ The regression shows the uncertainty in the estimate of the curve given the data
 
 From here we might conclude that the decay has a half-time of 6-10 months, but the data clearly does not fit the exponential model very well. In fact you woud never think of such a refression if you would only see the original curve.
 
-As the above model is a Cox regression in disguise, we must conclude that any survival-like model does not model this data. 
+As the above model is similar to a Cox regression, we must conclude that any survival-like model does not model this data. 
+
+## Notes
+
+[1] In survival analysis the Hazard rate is defined as a limit and can only be calculated for continuous distributions. With $T$ the time to event, $f$ the probability distribution function (pfd) and $F$ the cumulative df. (cdf), the $HAZ(t<T) = f(T)/(1-F(T))$. And then for two classes $A$ and $B$ the Hazard Ratio is $HR= HAZ(t<T|A)/HAZ(t<T|B)$. 
+
+[2] We might model with $\beta.e^{-\alpha.t}$ but more refined is if we divide the population into those that entered the system 2, 3, etc. weeks ago, an alternative would be to consider $\beta_1.e^{-\alpha} + \beta_1.e^{-2\alpha} + ... \beta_1.e^{-\alpha.t}$ and then we can factor out $e^{-\alpha.t}$ to obtain a row of slowly increasing constants with increasing $t$. So maybe we should use $\beta.log(t).e^{-\alpha.t}$, the Weibull function. That's what we did, it is slightly more realistic. But it does not explain the large mismatch. 
